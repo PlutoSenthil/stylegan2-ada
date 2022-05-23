@@ -224,16 +224,16 @@ def training_loop(
     cur_tick = -1
     tick_start_nimg = cur_nimg
     running_mb_counter = 0
-
+    
     done = False
     while not done:
-
+        print('--'*5,'Compute EMA decay parameter','--'*5)
         # Compute EMA decay parameter.
         Gs_nimg = G_smoothing_kimg * 1000.0
         if G_smoothing_rampup is not None:
             Gs_nimg = min(Gs_nimg, cur_nimg * G_smoothing_rampup)
         Gs_beta = 0.5 ** (minibatch_size / max(Gs_nimg, 1e-8))
-
+        print('#'*5,'Run training ops.','#'*5)
         # Run training ops.
         for _repeat_idx in range(minibatch_repeats):
             rounds = range(0, minibatch_size, minibatch_gpu * num_gpus)
@@ -241,9 +241,10 @@ def training_loop(
             run_D_reg = (lazy_regularization and running_mb_counter % D_reg_interval == 0)
             cur_nimg += minibatch_size
             running_mb_counter += 1
-
+            print('gradient accumulation.',_repeat_idx)
             # Fast path without gradient accumulation.
             if len(rounds) == 1:
+                print('>'*5,'Fast path without gradient accumulation.')
                 tflib.run([G_train_op, data_fetch_op])
                 if run_G_reg:
                     tflib.run(G_reg_op)
@@ -253,6 +254,7 @@ def training_loop(
 
             # Slow path with gradient accumulation.
             else:
+                print('>'*5,'Slow path with gradient accumulation.')
                 for _round in rounds:
                     tflib.run(G_train_op)
                     if run_G_reg:
@@ -263,15 +265,17 @@ def training_loop(
                     tflib.run(D_train_op)
                     if run_D_reg:
                         tflib.run(D_reg_op)
-
+            print('Run validation.')
             # Run validation.
             if aug is not None:
                 aug.run_validation(minibatch_size=minibatch_size)
-
+        
+        print('#'*20)
+        print('Tune augmentation parameters.')
         # Tune augmentation parameters.
         if aug is not None:
             aug.tune(minibatch_size * minibatch_repeats)
-
+        print('Perform maintenance tasks once per tick.')
         # Perform maintenance tasks once per tick.
         done = (cur_nimg >= total_kimg * 1000) or (abort_fn is not None and abort_fn())
         if done or cur_tick < 0 or cur_nimg >= tick_start_nimg + kimg_per_tick * 1000:
@@ -282,6 +286,7 @@ def training_loop(
             total_time = tick_end_time - start_time
             tick_time = tick_end_time - tick_start_time
 
+            print('Report progress.')
             # Report progress.
             print(' '.join([
                 f"tick {autosummary('Progress/tick', cur_tick):<5d}",
@@ -298,6 +303,7 @@ def training_loop(
             if progress_fn is not None:
                 progress_fn(cur_nimg // 1000, total_kimg)
 
+            print('Save snapshots.')
             # Save snapshots.
             if image_snapshot_ticks is not None and (done or cur_tick % image_snapshot_ticks == 0):
                 grid_fakes = Gs.run(grid_latents, grid_labels, is_validation=True, minibatch_size=minibatch_gpu)
@@ -311,6 +317,7 @@ def training_loop(
                     for metric in metrics:
                         metric.run(pkl, num_gpus=num_gpus)
 
+            print('Update summaries.')
             # Update summaries.
             for metric in metrics:
                 metric.update_autosummaries()
