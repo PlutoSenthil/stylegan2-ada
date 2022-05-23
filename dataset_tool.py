@@ -37,6 +37,7 @@ def error(msg):
 
 class TFRecordExporter:
     def __init__(self, tfrecord_dir, expected_images, print_progress=True, progress_interval=10, tfr_prefix=None):
+        print('#'*5,'__init__','#'*5)
         self.tfrecord_dir       = tfrecord_dir
         if tfr_prefix is None:
             self.tfr_prefix = os.path.join(self.tfrecord_dir, os.path.basename(self.tfrecord_dir))
@@ -58,6 +59,7 @@ class TFRecordExporter:
         assert os.path.isdir(self.tfrecord_dir)
 
     def close(self):
+        print('--'*5,'close','--'*5)
         if self.print_progress:
             print('%-40s\r' % 'Flushing data...', end='', flush=True)
         for tfr_writer in self.tfr_writers:
@@ -68,11 +70,13 @@ class TFRecordExporter:
             print('Added %d images.' % self.cur_images)
 
     def choose_shuffled_order(self): # Note: Images and labels must be added in shuffled order.
+        print('>'*5,'choose_shuffled_order')
         order = np.arange(self.expected_images)
         np.random.RandomState(123).shuffle(order)
         return order
 
     def add_image(self, img):
+        print('>'*5,'add_image')
         if self.print_progress and self.cur_images % self.progress_interval == 0:
             print('%d / %d\r' % (self.cur_images, self.expected_images), end='', flush=True)
         if self.shape is None:
@@ -93,11 +97,12 @@ class TFRecordExporter:
             quant = np.rint(img).clip(0, 255).astype(np.uint8)
             ex = tf.train.Example(features=tf.train.Features(feature={
                 'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
-                'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tostring()]))}))
+                'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tobytes()]))}))
             tfr_writer.write(ex.SerializeToString())
         self.cur_images += 1
 
     def add_labels(self, labels):
+        print('>'*5,'add_labels')
         if self.print_progress:
             print('%-40s\r' % 'Saving labels...', end='', flush=True)
         assert labels.shape[0] == self.cur_images
@@ -105,9 +110,11 @@ class TFRecordExporter:
             np.save(f, labels.astype(np.float32))
 
     def __enter__(self):
+        print('#'*5,'__enter__','#'*5)
         return self
 
     def __exit__(self, *args):
+        print('#'*5,'__exit__','#'*5)
         self.close()
 
 
@@ -667,6 +674,7 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
         error('Input images must be stored as RGB or grayscale')
 
     with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
+        print('TFRecordExporter - create_from_images')
         order = tfr.choose_shuffled_order() if shuffle else np.arange(len(image_filenames))
         for idx in range(order.size):
             img = np.asarray(PIL.Image.open(image_filenames[order[idx]]))
@@ -699,6 +707,7 @@ def convert_to_hdf5(hdf5_filename, tfrecord_dir, compress):
     dset = dataset.TFRecordDataset(tfrecord_dir, max_label_size='full', repeat=False, shuffle=False)
     tflib.init_uninitialized_vars()
     with HDF5Exporter(hdf5_filename, resolution=dset.shape[1], channels=dset.shape[0], compress=compress) as h5:
+        print('HDF5Exporter - convert_to_hdf5')
         all_labels = []
         while True:
             images, labels = dset.get_minibatch_np(1)
@@ -729,6 +738,7 @@ def hdf5_from_images(hdf5_filename, image_dir, compress):
         error('Input images must be stored as RGB or grayscale')
 
     with HDF5Exporter(hdf5_filename, resolution=resolution, channels=channels, compress=compress, expected_images=len(image_filenames)) as h5:
+        print('HDF5Exporter - hdf5_from_images')
         for image_filename in image_filenames:
             img = np.asarray(PIL.Image.open(image_filename))
             if channels == 1:
