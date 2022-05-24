@@ -179,8 +179,8 @@ def construct_batch_of_matrices(*rows):
     rows = [[tf.convert_to_tensor(x, dtype=tf.float32) for x in r] for r in rows]
     batch_elems = [x for r in rows for x in r if x.shape.rank != 0]
     assert all(x.shape.rank == 1 for x in batch_elems)
-    # batch_size = tf.shape(batch_elems[0])[0] if len(batch_elems) else 1
-    batch_size = 1
+    batch_size = tf.shape(batch_elems[0])[0] if len(batch_elems) else 1
+    # batch_size = 1
     rows = [[tf.broadcast_to(x, [batch_size]) for x in r] for r in rows]
     return tf.transpose(rows, [2, 0, 1])
 
